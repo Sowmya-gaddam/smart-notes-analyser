@@ -1,7 +1,5 @@
 streamlit
-nltk
-textblob
-pytesseract
-pdf2image
-pillow
+PyPDF2
 sumy
+nltk
+rake-nltk
