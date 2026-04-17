@@ -1,0 +1,7 @@
+streamlit
+nltk
+textblob
+pytesseract
+pdf2image
+pillow
+sumy
