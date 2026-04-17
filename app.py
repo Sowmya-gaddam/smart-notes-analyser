@@ -1,112 +1,114 @@
 import streamlit as st
-from textblob import TextBlob
-import nltk
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
+import re
+from collections import Counter
 
-# OCR
-import pytesseract
-from pdf2image import convert_from_bytes
+# PDF support
+from PyPDF2 import PdfReader
 
 # Summarization
-from sumy.summarizers.lsa import LsaSummarizer
 from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer
+from sumy.summarizers.lsa import LsaSummarizer
 
-# ---------------- SETTINGS ----------------
+# Topic extraction
+from rake_nltk import Rake
+import nltk
 
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-POPPLER_PATH = r"C:\Users\sowmy\Downloads\Release-25.12.0-0\Library\bin"
-
-# NLTK downloads
+# Download required data
 nltk.download('punkt')
-nltk.download('punkt_tab')
 nltk.download('stopwords')
 
-# ---------------- UI ----------------
+# Page config
+st.set_page_config(page_title="Smart Notes Analyser")
 
-st.title("🧠 Smart Notes Analyzer")
+st.title("📘 Smart Notes Analyser")
+st.write("Upload your notes and analyze them easily.")
 
-text = st.text_area("✍️ Enter your notes:")
+# ---------- FILE UPLOAD ----------
+uploaded_file = st.file_uploader("Upload file", type=["txt", "pdf"])
 
-# ---------------- PDF ----------------
+# ---------- FUNCTIONS ----------
 
-uploaded_file = st.file_uploader("📄 Upload PDF", type="pdf")
-
-if uploaded_file is not None:
-    try:
-        images = convert_from_bytes(
-            uploaded_file.read(),
-            poppler_path=POPPLER_PATH
-        )
-
-        text = ""
-
-        for img in images:
-            text += pytesseract.image_to_string(img)
-
-        st.success("✅ PDF text extracted successfully!")
-        st.write("Preview:", text[:500])
-
-    except Exception as e:
-        st.error("❌ PDF Error: " + str(e))
-
-# ---------------- FUNCTIONS ----------------
-
-# Summary
-def advanced_summary(text):
+# Summarization
+def generate_summary(text):
     parser = PlaintextParser.from_string(text, Tokenizer("english"))
     summarizer = LsaSummarizer()
-    summary = summarizer(parser.document, 2)
+    summary_sentences = summarizer(parser.document, 3)
+    return " ".join(str(sentence) for sentence in summary_sentences)
 
-    result = ""
-    for sentence in summary:
-        result += str(sentence) + " "
+# Q&A
+def answer_question(text, question):
+    sentences = re.split(r'(?<=[.!?]) +', text)
+    question_words = question.lower().split()
 
-    return result
+    scores = []
+    for sentence in sentences:
+        sentence_words = sentence.lower().split()
+        common = Counter(question_words) & Counter(sentence_words)
+        score = sum(common.values())
+        scores.append((score, sentence))
 
-# IMPORTANT TOPICS
+    best_sentence = max(scores, key=lambda x: x[0])[1]
+    return best_sentence
+
+# Topic extraction
 def extract_topics(text):
-    words = word_tokenize(text)
-    stop_words = set(stopwords.words("english"))
+    rake = Rake()
+    rake.extract_keywords_from_text(text)
+    return rake.get_ranked_phrases()[:5]
 
-    topics = []
-    current_topic = []
+# ---------- MAIN ----------
 
-    for word in words:
-        if word.lower() not in stop_words and word.isalpha():
-            current_topic.append(word)
-        else:
-            if len(current_topic) > 1:
-                topics.append(" ".join(current_topic))
-            current_topic = []
+if uploaded_file:
+    content = ""
 
-    return list(set(topics))[:5]
+    # PDF Handling
+    if uploaded_file.type == "application/pdf":
+        pdf = PdfReader(uploaded_file)
 
-# ---------------- ANALYZE ----------------
+        for page in pdf.pages:
+            text = page.extract_text()
+            if text:
+                content += text
 
-if st.button("🔍 Analyze"):
-    if text.strip() != "":
+        # Check if PDF is scanned
+        if content.strip() == "":
+            st.warning("⚠ This looks like a scanned PDF. Please upload a text-based PDF or TXT file.")
 
-        # Summary
-        st.subheader("📌 Summary")
-        st.write(advanced_summary(text))
-
-        # Sentiment
-        st.subheader("😊 Sentiment")
-        polarity = TextBlob(text).sentiment.polarity
-
-        if polarity > 0:
-            st.success("Positive")
-        elif polarity < 0:
-            st.error("Negative")
-        else:
-            st.info("Neutral")
-
-        # Important Topics
-        st.subheader("📌 Important Topics")
-        topics = extract_topics(text)
-        st.write(topics)
-
+    # TXT Handling
     else:
-        st.warning("⚠️ Please enter or upload some text")
+        try:
+            content = uploaded_file.read().decode("utf-8")
+        except:
+            content = uploaded_file.read().decode("latin-1")
+
+    # Show content
+    if content.strip() != "":
+        st.subheader("📄 Your Notes")
+        st.write(content)
+
+        # ---------- SUMMARY ----------
+        st.subheader("🧠 Summary")
+        if st.button("Generate Summary"):
+            with st.spinner("Processing..."):
+                summary = generate_summary(content)
+            st.write(summary)
+
+        # ---------- Q&A ----------
+        st.subheader("❓ Ask Questions from Notes")
+        question = st.text_input("Enter your question")
+
+        if question:
+            answer = answer_question(content, question)
+            st.subheader("💡 Answer")
+            st.write(answer)
+
+        # ---------- TOPICS ----------
+        st.subheader("🏷️ Important Topics")
+        if st.button("Extract Topics"):
+            topics = extract_topics(content)
+            for topic in topics:
+                st.write("•", topic)
+
+else:
+    st.info("Please upload a TXT or text-based PDF file to begin.")
