@@ -2,6 +2,19 @@ import streamlit as st
 import re
 from collections import Counter
 import pdfplumber
+import os
+import nltk
+
+# ---------- NLTK FIX FOR CLOUD ----------
+nltk_data_path = os.path.join(os.getcwd(), "nltk_data")
+if not os.path.exists(nltk_data_path):
+    os.makedirs(nltk_data_path)
+
+nltk.data.path.append(nltk_data_path)
+
+nltk.download('punkt', quiet=True)
+nltk.download('punkt_tab', quiet=True)
+nltk.download('stopwords', quiet=True)
 
 # Summarization
 from sumy.parsers.plaintext import PlaintextParser
@@ -10,20 +23,6 @@ from sumy.summarizers.lsa import LsaSummarizer
 
 # Topic extraction
 from rake_nltk import Rake
-import nltk
-
-# ---------- SAFE NLTK DOWNLOAD ----------
-# ---------- SAFE NLTK DOWNLOAD ----------
-import nltk
-
-def download_nltk():
-    resources = ["punkt", "punkt_tab", "stopwords"]
-    for resource in resources:
-        try:
-            nltk.data.find(resource)
-        except LookupError:
-            nltk.download(resource)
-
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(page_title="Smart Notes Analyser")
@@ -36,12 +35,15 @@ uploaded_file = st.file_uploader("Upload file", type=["txt", "pdf"])
 
 # ---------- FUNCTIONS ----------
 
-# Summarization
+# Summarization (SAFE)
 def generate_summary(text):
-    parser = PlaintextParser.from_string(text, Tokenizer("english"))
-    summarizer = LsaSummarizer()
-    summary_sentences = summarizer(parser.document, 3)
-    return " ".join(str(sentence) for sentence in summary_sentences)
+    try:
+        parser = PlaintextParser.from_string(text, Tokenizer("english"))
+        summarizer = LsaSummarizer()
+        summary_sentences = summarizer(parser.document, 3)
+        return " ".join(str(sentence) for sentence in summary_sentences)
+    except Exception:
+        return "⚠️ Summary generation failed. Try another file."
 
 # Q&A
 def answer_question(text, question):
@@ -58,8 +60,7 @@ def answer_question(text, question):
     if scores:
         best_sentence = max(scores, key=lambda x: x[0])[1]
         return best_sentence
-    else:
-        return "No relevant answer found."
+    return "No relevant answer found."
 
 # Topic extraction
 def extract_topics(text):
@@ -72,7 +73,7 @@ def extract_topics(text):
 if uploaded_file:
     content = ""
 
-    # ---------- PDF HANDLING ----------
+    # ---------- PDF ----------
     if uploaded_file.type == "application/pdf":
         try:
             with pdfplumber.open(uploaded_file) as pdf:
@@ -83,14 +84,14 @@ if uploaded_file:
         except Exception as e:
             st.error(f"❌ Error reading PDF: {e}")
 
-    # ---------- TXT HANDLING ----------
+    # ---------- TXT ----------
     else:
         try:
             content = uploaded_file.read().decode("utf-8")
         except:
             content = uploaded_file.read().decode("latin-1")
 
-    # ---------- CHECK CONTENT ----------
+    # ---------- CHECK ----------
     if not content.strip():
         st.warning("⚠ Could not extract readable text. Try another file.")
     else:
