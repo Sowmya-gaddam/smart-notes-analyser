@@ -13,15 +13,17 @@ from rake_nltk import Rake
 import nltk
 
 # ---------- SAFE NLTK DOWNLOAD ----------
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt')
+# ---------- SAFE NLTK DOWNLOAD ----------
+import nltk
 
-try:
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    nltk.download('stopwords')
+def download_nltk():
+    resources = ["punkt", "punkt_tab", "stopwords"]
+    for resource in resources:
+        try:
+            nltk.data.find(resource)
+        except LookupError:
+            nltk.download(resource)
+
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(page_title="Smart Notes Analyser")
