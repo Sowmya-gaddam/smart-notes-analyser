@@ -3,3 +3,4 @@ pdfplumber
 sumy
 rake-nltk
 nltk
+regex
